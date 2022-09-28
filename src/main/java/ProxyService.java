@@ -109,15 +109,29 @@ public class ProxyService {
         return response.toString();
     }
 
+    public static String prepareMessage_string(String payload, String response_string, String provider,String object_type){
+        JSONObject response  = new JSONObject()
+                .put("response", response_string)
+                .put("data",  payload)
+                .put("provider", provider)
+                .put("object_type", object_type);
+
+
+        return response.toString();
+    }
+
     public static boolean parseCommand(String message, String sender){
         ObjectMapper mapper = new ObjectMapper();
+        String context_kubernetes = "";
         try {
                 JsonNode jsoncommand = mapper.readValue(message, JsonNode.class);
                 String command = jsoncommand.get("command").asText();
 
+                System.out.println("k8s mode:" + ProxyService.prop.getProperty("kubernetes_config_mode"));
                 System.out.println("command received:" + command);
                 switch(command) {
                     case "ping":
+                        //{"command":"ping"}
                         System.out.println("ping command");
                         ProxyService.sendMessage("server", sender,"{\"command\":\"pong!\"}");
                         break;
@@ -144,26 +158,54 @@ public class ProxyService {
                         ProxyService.sendMessage("server", sender, outstring_gcp);
                         break;
                     case "kubernetes_get_pods":
-                        //command fot testing purposes
                         //{"command":"GetKubernetes","context":""}
-                        String context_kubernetes = jsoncommand.get("context").asText();
+                        context_kubernetes = jsoncommand.get("context").asText();
                         try {
-                            //JSONArray xs = Kubernetesp.GetPods(context_kubernetes);
-                            //System.out.println(xs.toString(1));
-                            String outstring_k8s = prepareMessage(Kubernetesp.GetPods(context_kubernetes),"response_kubernetes_get_pods");
+                            String outstring_k8s = prepareMessage_string(Kubernetesp.GetPods(context_kubernetes),"response_kubernetes_get_pods", "kubernetes","pod");
                             ProxyService.sendMessage("server", sender, outstring_k8s);
                         } catch (ApiException e) {
                             e.printStackTrace();
                         }
-
+                        break;
+                    case "kubernetes_get_services":
+                        //{"command":"kubernetes_get_services","context":""}
+                        context_kubernetes = jsoncommand.get("context").asText();
+                        try {
+                            String outstring_k8s = prepareMessage_string(Kubernetesp.GetServices(context_kubernetes),"response_kubernetes_get_services","kubernetes", "service");
+                            ProxyService.sendMessage("server", sender, outstring_k8s);
+                        } catch (ApiException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    case "kubernetes_get_namespaces":
+                        //{"command":"kubernetes_get_services","context":""}
+                        context_kubernetes = jsoncommand.get("context").asText();
+                        try {
+                           String outstring_k8s = prepareMessage_string(Kubernetesp.GetNamespaces(context_kubernetes),"response_kubernetes_get_namespaces","kubernetes", "deployment");
+                           ProxyService.sendMessage("server", sender, outstring_k8s);
+                           //System.out.println(outstring_k8s);
+                        } catch (ApiException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    case "kubernetes_get_all_deployments":
+                        //{"command":"kubernetes_get_all_deployments","context":""}
+                        String context_kubernetes3 = jsoncommand.get("context").asText();
+                        try {
+                            String outstring_k8s = prepareMessage_string(Kubernetesp.GetAllDeployments(context_kubernetes3),"response_kubernetes_get_all_deployments","kubernetes", "deployment");
+                            ProxyService.sendMessage("server", sender, outstring_k8s);
+                            //System.out.println(outstring_k8s);
+                        } catch (ApiException e) {
+                            e.printStackTrace();
+                        }
                         break;
                     default:
-                        System.out.println("unknown command");
+                        System.out.println("Unknown command");
                         break;
                 }
                 return true;
         } catch (NullPointerException | IOException e) {
-            System.out.println("do not understand the command");
+            System.out.println("Command exception: do not understand the command");
             e.printStackTrace();
             return false;
         }

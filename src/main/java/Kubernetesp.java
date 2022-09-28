@@ -1,11 +1,16 @@
 import com.google.gson.*;
+import com.google.gson.Gson;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.Configuration;
+import io.kubernetes.client.openapi.apis.AppsV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
+import io.kubernetes.client.openapi.models.V1DeploymentList;
 import io.kubernetes.client.openapi.models.V1Pod;
 import io.kubernetes.client.openapi.models.V1PodList;
+import io.kubernetes.client.openapi.models.V1ServiceList;
 import io.kubernetes.client.util.ClientBuilder;
+import io.kubernetes.client.util.Config;
 import io.kubernetes.client.util.KubeConfig;
 
 import org.joda.time.DateTime;
@@ -19,13 +24,12 @@ import java.lang.reflect.Type;
 import java.time.Instant;
 
 public class Kubernetesp {
-    public static JSONArray GetPods(String Context) throws IOException, ApiException {
-        JSONArray Nodes = new JSONArray();
-        if(ProxyService.prop.getProperty("kubernetes_config_mode").equals("file_config")) {
+    Config CoreV1Api = null;
+    public static CoreV1Api Config(String Context) throws IOException, ApiException {
+        if (ProxyService.prop.getProperty("kubernetes_config_mode").equals("file_config")) {
             // file path to your KubeConfig
             String kubeConfigPath = ProxyService.prop.getProperty("kubernetes_config");
             // loading the out-of-cluster config, a kubeconfig from file-system
-            // ApiClient client = ClientBuilder.kubeconfig(KubeConfig.loadKubeConfig(new FileReader(kubeConfigPath))).build();
 
             KubeConfig kubeconfig = KubeConfig.loadKubeConfig(new FileReader(kubeConfigPath));
             kubeconfig.setContext(Context);
@@ -35,59 +39,81 @@ public class Kubernetesp {
             ApiClient client = ClientBuilder.kubeconfig(kubeconfig).build();
             Configuration.setDefaultApiClient(client);
 
-        } else if(ProxyService.prop.getProperty("kubernetes_config_mode").equals("incluster")){
-            ApiClient client = ClientBuilder.cluster().build();
+        } else if (ProxyService.prop.getProperty("kubernetes_config_mode").equals("incluster")){
+            // in-cluster config
+            System.out.println("incluster config init");
+            // set the global default api-client to the in-cluster one from above
+            ApiClient client = Config.defaultClient();
             Configuration.setDefaultApiClient(client);
 
+            System.out.println("incluster config end");
         }
-
-        // set the global default api-client to the in-cluster one from above
-        //Configuration.setDefaultApiClient(client);
-
-        // the CoreV1Api loads default api-client from global configuration.
         CoreV1Api api = new CoreV1Api();
+        return api;
+    }
+    public static String GetServices(String Context) throws IOException, ApiException {
+        CoreV1Api api = Config(Context);
+        //CoreV1Api api = CoreV1Api(Config.defaultClient());
+        V1ServiceList list = api.listServiceForAllNamespaces(null,null,null,null,null,null,null,null,null,null);
 
-        // invokes the CoreV1Api client
-        // V1PodList list = api.listPodForAllNamespaces(null, null, null, null, null, null, null, null, null);
+        Gson gson = new GsonBuilder().registerTypeAdapter(DateTime.class, new DateTimeTypeAdapter()).setPrettyPrinting().create();
+        String jsonOut = gson.toJson(list.getItems());
+
+        //System.out.println(jsonOut);
+
+        return(jsonOut);
+    }
+    public static String GetNamespaces(String Context) throws IOException, ApiException {
+        CoreV1Api api = Config(Context);
+        //CoreV1Api api = CoreV1Api(Config.defaultClient());
+        V1ServiceList list = api.listServiceForAllNamespaces(null,null,null,null,null,null,null,null,null,null);
+
+        Gson gson = new GsonBuilder().registerTypeAdapter(DateTime.class, new DateTimeTypeAdapter()).setPrettyPrinting().create();
+        String jsonOut = gson.toJson(list.getItems());
+
+        System.out.println(jsonOut);
+
+        return(jsonOut);
+    }
+
+    public static String GetDeployment(String Namespace) throws IOException, ApiException {
+        AppsV1Api apiInstance = new AppsV1Api(Config.defaultClient());
+
+        V1DeploymentList list = apiInstance.listNamespacedDeployment(Namespace,null,null,null,null,null,null,null,null,null,null);
+
+        Gson gson = new GsonBuilder().registerTypeAdapter(DateTime.class, new DateTimeTypeAdapter()).setPrettyPrinting().create();
+        String jsonOut = gson.toJson(list.getItems());
+
+        //System.out.println(jsonOut);
+
+        return(jsonOut);
+    }
+
+    public static String GetAllDeployments(String Context) throws IOException, ApiException {
+        AppsV1Api apiInstance = new AppsV1Api(Config.defaultClient());
+
+        V1DeploymentList list = apiInstance.listDeploymentForAllNamespaces(null,null,null,null,null,null,null,null,null,null);
+
+        Gson gson = new GsonBuilder().registerTypeAdapter(DateTime.class, new DateTimeTypeAdapter()).setPrettyPrinting().create();
+        String jsonOut = gson.toJson(list.getItems());
+
+        System.out.println(jsonOut);
+
+        return(jsonOut);
+    }
+
+
+//    public static JSONArray GetPods(String Context) throws IOException, ApiException {
+    public static String GetPods(String Context) throws IOException, ApiException {
+
+        CoreV1Api api = Config(Context);
+        JSONArray Nodes = new JSONArray();
+
         V1PodList list = api.listPodForAllNamespaces(null, null, null, null, null, null, null, null, null, null);
-        for (V1Pod item : list.getItems()) {
+        Gson gson = new GsonBuilder().registerTypeAdapter(DateTime.class, new DateTimeTypeAdapter()).setPrettyPrinting().create();
+        String jsonOut = gson.toJson(list.getItems());
 
-            //System.out.println(item.toString());
-
-            JSONObject Node_prepared = new JSONObject();
-
-            //use datetime joda deserializer
-            Gson gson = new GsonBuilder().registerTypeAdapter(DateTime.class, new DateTimeTypeAdapter()).create();
-
-            String jsonSpecs = gson.toJson(item.getSpec());
-            String jsonMetadata = gson.toJson(item.getMetadata());
-            String jsonStatus = gson.toJson(item.getStatus());
-            //String jsonApiVersion = gson.toJson(item.getApiVersion());
-
-            Node_prepared.put("specs", new JSONObject(jsonSpecs));
-            Node_prepared.put("metadata", new JSONObject(jsonMetadata));
-            Node_prepared.put("status", new JSONObject(jsonStatus));
-            //Node_prepared.put("apiversion", new JSONObject(jsonApiVersion));
-
-            //System.out.println(Node_prepared.toString(2));
-
-            Transformer tr = new Transformer();
-            tr.uid=Node_prepared.getJSONObject("metadata").get("uid").toString().toLowerCase();
-            //pod name
-            if (Node_prepared.getJSONObject("metadata").has("name"))
-                tr.name=Node_prepared.getJSONObject("metadata").get("name").toString();
-            if (Node_prepared.getJSONObject("metadata").has("namespace"))
-                tr.namespace = Node_prepared.getJSONObject("metadata").get("namespace").toString();
-            tr.state=Node_prepared.getJSONObject("status").get("phase").toString().toLowerCase();
-            tr.type="pod";
-            tr.serviceProvider="kubernetes";
-
-            Nodes.put(tr.Transform(Node_prepared));
-            //Nodes.put(Node_prepared);
-
-        }
-        return Nodes;
-        //return Transform(Nodes, "none");
+        return jsonOut;
     }
 
     //joda datetime serializer/deserializer

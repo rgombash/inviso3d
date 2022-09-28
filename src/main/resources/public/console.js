@@ -84,6 +84,12 @@ function console_command_parse(input)
 				break;
 			}
 		break;
+		case "ping":
+			console_append(`ping!`);
+			websocket.send(`{"command":"kubernetes_get_all_deployments","context":""}`);
+
+		break;
+
 		default:
 			console_append(`Unknown command. Type "help" for options`);
 		break;
